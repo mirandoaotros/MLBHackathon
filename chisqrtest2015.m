@@ -120,92 +120,44 @@ end
 %% Clear temporary variables
 clearvars i j out fastballlist ppitchTypeF
 
-%% Set up parameters
-serie=ppitchTypeFBoBB;                                                      %Preserves the original series. 'serie' will be chop up
-l=3;                                                                        %determines block length
-v=2^l;                                                                      %computes the number of cambinations
-q=10*2^l;                                                                   %determines the number of initialization steps
-k=floor(size(serie,1)/l)-q;                                                 %determines the number of test steps
-
-%% Get Permutations
-x='01';                                                                     %set of possible letters
-K=l;                                                                        %length of each permutation
-
-C=cell(K, 1);                                                               %preallocate a cell array
-tab=cell(2^l,2);                                                            %preallocate a cell array
-tab(:,2)=num2cell(0);                                                       %preallocate a cell array
-[C{:}]=ndgrid(x);                                                           %create K grids of values
-y=cellfun(@(x){x(:)}, C);                                                   %convert grids to column vectors
-y=[y{:}];                                                                   %obtain all permutations
-tab(:,1)=cellstr(y);                                                        %stores the permutations
-
-%% Clear temporary variables
-clearvars i x K C y
-
-%% Partition serie
-blockp=NaN((q+k),l);                                                        %preallocate variable
-for i=1:(q+k)                                                               %partition the series in blocks
-    blockp(i,:)=serie(1:l,1);
-    serie=serie(l+1:end);
-end
-
-block=cell(q+k,1);                                                          %preallocate a cell array
-for i=1:q+k                                                                 %transform the blocks into strings
-    blockpp=num2str(blockp(i,:));
-    blockpp=blockpp(~isspace(blockpp));
-    block(i,1)={blockpp};
-end
-
-%% Clear temporary variables
-clearvars serie blockp blockpp
-
-%% Build the reference table
-for i=1:size(tab,1)                                                         %finds last observation of each permutation in the q initialization block
-    for j=q:-1:1
-        strcmp(tab(i,1),block(j,1));
-        if ans == 1
-            index=j;
-            index=num2cell(index);
-            tab(i,2)=index;
-            break
-        end
+%% Strike or Ball
+sobF=NaN(size(pxF,1),1);                                                    %preallocate variable
+for i=1:size(sobF,1);                                                       %identifies strikes as 1 and balls as 0
+    if pzF(i,1) > szbF(i,1)-eps && pzF(i,1) < sztF(i,1)+eps;                
+        sobF(i,1)=1;
+    else
+        sobF(i,1)=0;
     end
 end
 
-%% Clear temporary variables
-clearvars index i j ans
+%% Chi squared statistic
+obs=[size(ppitchTypeFBoBB,1)-sum(ppitchTypeFBoBB); sum(ppitchTypeFBoBB)];   %computes observations frequency
+exp=[size(ppitchTypeFBoBB,1)*bbexp; size(ppitchTypeFBoBB,1)*fbexp];         %computes expected frequencies
+x2 = sum((obs-exp).^2 ./ exp);                                              %computes chi^2 statistic
 
-%% test
+Pval=1-chi2cdf(x2,1);                                                       %computes p-value
+Final=[x2 Pval];                                                            %stores final results
+
+%% Expanded Chi squared statistic
+ 
 a=0;                                                                        %preallocate variable
-for i=q+1:q+k                                                               %finds last observation on each block and sums the log of the distance,
-    for j=1:size(tab,1)                                                         %also, updates the reference table.
-        strcmp(tab(j,1),block(i,1));
-        if ans == 1
-            index=cell2mat(tab(j,2));
-            step=log2(i-index);
-            a=a+step;
-            index=i;
-            index=num2cell(index);
-            tab(j,2)=index;
-            break
-        end
+b=0;                                                                        %preallocate variable
+c=0;                                                                        %preallocate variable
+d=0;                                                                        %preallocate variable
+for i=1:size(sobF,1);                                                       %classifies observations
+    if ppitchTypeFBoBB(i,1) == 1 && sobF(i,1) == 1                          
+        a=a+1;
+    elseif ppitchTypeFBoBB(i,1) == 1 && sobF(i,1) == 0
+        b=b+1;
+    elseif ppitchTypeFBoBB(i,1) == 0 && sobF(i,1) == 1
+        c=c+1;
+    else
+        d=d+1;
     end
 end
-Ftu=a/k;                                                                    %computes the FTu statistic
 
-%% Clear temporary variables
-clearvars a i j ans index step
-
-%%
-y=1.96;                                                                     %Determines the tolerance level for the test, 0.05 in this case
-meantable=2.4016068;                                                        %set parameter from critical value table
-vartable=1.901;                                                             %set parameter from critical value table
-c=0.7-(0.8/l)+((((4+(32/l))*k)^(-(3/l)))/15);                               %computes constant
-s=c*vartable;                                                               %computes critical value adjustment
-t1=meantable-y*s;                                                           %set lower acceptance level
-t2=meantable+y*s;                                                           %set upper acceptance level
-Pval=normcdf(Ftu,meantable,s);                                              %computes p value
-Final=[Ftu Pval];                                                           %stores results
-
-%% Clear temporary variables
-clear y meantable vartable c s
+obs=[a;b;c;d];                                                              %computes observations frequency
+exp=size(sobF,1)*[fbexp*sexp;fbexp*bexp;bbexp*sexp;bbexp*bexp];             %computes expected frequencies
+x2 = sum((obs-exp).^2 ./ exp);                                              %computes chi^2 statistic
+Pval=1-chi2cdf(x2,1);                                                       %computes p-value
+Final=[Final x2 Pval];                                                      %stores final results
